@@ -33,6 +33,8 @@ arxiv link: https://arxiv.org/pdf/2108.10335.pdf
     </div>
 </center>
 
-定义超分问题
+文章指出传统的downscaling方法pooling和downsample处理的图像包括高频和低频信息，而实际采样限制会导致aliasing问题。为了避免aliasing，一种传统做法是先用低通滤波器过滤图像中的高频信息后再进行downsample。
+
+进而定义超分应当是downscaling的逆操作，即对应“filter-then-downsampling”逆操作为“upsampling-then-filter”。本文提出网络模型遵循这一结构。
 
 ---

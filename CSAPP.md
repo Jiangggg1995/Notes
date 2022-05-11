@@ -57,13 +57,13 @@ E-->|执行|F( );
 
 **处理器** 解释/执行主存中的计算指令
 
-![](D:\SYNC\Notes\images\csapp\hardware_organization.png)
+![](https://github.com/Jiangggg1995/Notes/blob/main/images/csapp/hardware_organization.png?raw=true)
 
 ---
 
 存储空间更大的设备读写数据开销的时间越大，反之开销越小。程序及数据在存储单元中有局部性特点（即存储单元局部空间的数据和指令在执行顺序上也更接近）。基于上述两个特点计算机系统设计了多级缓存原理。
 
-![](D:\SYNC\Notes\images\csapp\memory_hierarchy.png)
+![](https://github.com/Jiangggg1995/Notes/blob/main/images/csapp/memory_hierarchy.png?raw=true)
 
 ---
 
