@@ -52,11 +52,12 @@ upsampling-then-filter过程如Figure2上半部分所示，先将原图间隔插
 
 ![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_2_Figure_3.png)
 
-本文提出的第一个网络结构即**Maxout**。模型结构如上图，pytorch实现如下图。
+本文提出的第一个网络结构即**Maxout**。模型结构如上图。
 
 输入为$1\times H \times W$,经过一层卷积层得到$(s*s*C) \times H \times W$的特征图fmap1，fmap1通过系数为$s$的PixelShuffle层得到$C \times sH \times sW$的特征图fmap2，fmap2在第一维度上取max得到最终的$1 \times sH \times sW$的输出结果。其中$s$ 和$c$是模型可调节的超参。
 
 ```python
+# eSR-Max implemented by pytorch
 import torch
 from torch import nn
 class edgeSR_MAX(nn.Module):
@@ -73,6 +74,43 @@ class edgeSR_MAX(nn.Module):
         )
     def forward(self, input):
         return self.pixel_shuffle(
-            self.filter(input)
-        ).max(dim=1, keepdim=True)[0]
+            self.filter(input)
+        ).max(dim=1, keepdim=True)[0]
 ```
+
+#### 2.Self–Attention
+
+<div id="1" >跳转位置</div>
+
+![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/eb1717ba65234d5f8b1846497d4c8d2a-18355445-c149-48c8-a203-560cc9829e4f.png)
+
+eSR-TM是文中提出的引入注意力机制的模型，其主要结构如上。在PixelShuffle层前将卷积输出通道数加倍。在PixelShuffle后将一半通道的特征图通过softmax用于产生注意力系数，乘上另一半通道的特征图上，再累加得到最后的结果。
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_3_Figure_5.png)
+
+上图是文章给出eSR-TM的原理解释。其想表达的意思是先通过一个模板matching机制产生置信度，作用于特征图上赋予其权重。不过match机制中的卷积核也是训练出来的而不是手工设计的特征，所以其有效性分析也只是对黑盒模型的一种合理推测。
+
+```python
+# eSR-TM implemented by pytorch
+import torch
+from torch import nn
+class edgeSR_TM(nn.Module):
+    def __init__(self, C, k, s):
+        super().__init__()
+        self.pixel_shuffle = nn.PixelShuffle(s)
+        self.softmax = nn.Softmax(dim=1)
+        self.filter = nn.Conv2d(in_channels=1, out_channels=2*s*s*C, kernel_size=k, tride=1, padding=(k-1)//2, bias=False, )
+    def forward(self, input):
+        filtered = self.pixel_shuffle(self.filter(input))
+        B, C, H, W = filtered.shape
+        filtered = filtered.view(B, 2, C, H, W)
+        upscaling = filtered[:, 0]
+        matching = filtered[:, 1]
+        return torch.sum(upscaling * self.softmax(matching),30 dim=1, keepdim=True)
+```
+
+#### 3.Transformer
+
+![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/1760deca226b404e924980f8024c6dac-8e2890dd-9eb2-4ab6-9f65-76f201c434eb.png)
+
+上图是本文提出的第三种模型，加入了Transformer设计。其相对[Self Attention](#2.Self–Attention)
