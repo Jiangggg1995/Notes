@@ -113,4 +113,30 @@ class edgeSR_TM(nn.Module):
 
 ![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/1760deca226b404e924980f8024c6dac-8e2890dd-9eb2-4ab6-9f65-76f201c434eb.png)
 
-上图是本文提出的第三种模型，加入了Transformer设计。其相对[Self Attention](#2.Self–Attention)
+上图是本文提出的第三种模型，加入了Transformer设计。其相对Self Attention增加了Transformer中的Query和Key机制去产生自注意力系数，控制其余通道特征图生成最后结果。
+
+```python
+# edgeST-Transformer implemented by pytorch
+import torch
+from torch import nn
+class edgeSR_TR(nn.Module):
+    def __init__(self, C, k, s):
+        super().__init__()
+        self.pixel_shuffle = nn.PixelShuffle(s)
+        self.softmax = nn.Softmax(dim=1)
+        self.filter = nn.Conv2d(in_channels=1, out_channels=3*s*s*C, kernel_size=k, stride=1, padding=(k-1)//2, bias=False)
+    def forward(self, input):
+        filtered = self.pixel_shuffle(self.filter(input))
+        B, C, H, W = filtered.shape
+        filtered = filtered.view(B, 3, C, H, W)
+        value = filtered[:, 0]
+        query = filtered[:, 1]
+        key = filtered[:, 2]
+        return torch.sum(value * self.softmax(query*key), dim=1, keepdim=True )
+```
+
+#### 4.eSR-CNN
+
+![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/830c3be3ba7f4068bf7bdaedc2c8e54c-8fa5a16b-2003-4e9f-8faf-2a83d593bc1a.png)
+
+上图是本文提出的第四种模型结构eSR-CNN。这是一种加了Self Attention的[ESPCN]([Real-Time Single Image and Video Super-Resolution Using an Efficient Sub-Pixel Convolutional Neural Network (readpaper.com)](https://readpaper.com/paper/2476548250))网络
