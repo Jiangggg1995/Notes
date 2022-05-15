@@ -139,4 +139,49 @@ class edgeSR_TR(nn.Module):
 
 ![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/830c3be3ba7f4068bf7bdaedc2c8e54c-8fa5a16b-2003-4e9f-8faf-2a83d593bc1a.png)
 
-上图是本文提出的第四种模型结构eSR-CNN。这是一种加了Self Attention的[ESPCN]([Real-Time Single Image and Video Super-Resolution Using an Efficient Sub-Pixel Convolutional Neural Network (readpaper.com)](https://readpaper.com/paper/2476548250))网络
+上图是本文提出的第四种模型结构eSR-CNN。这是一种加了Self Attention的[ESPCN](https://readpaper.com/paper/2476548250)网络，本文旨在测试注意力机制对ESPCN是否有加成作用。
+
+```python
+# eSR-CNN implemented by pytorch
+import torch
+from torch import nn
+class edgeSR_CNN(nn.Module):
+    def __init__(self, C, D, S, s):
+         super().__init__()
+         self.softmax = nn.Softmax(dim=1)
+         if D == 0:
+             self.filter = nn.Sequential(
+                 nn.Conv2d(D, S, 3, 1, 1),
+                 nn.Tanh(),
+                 nn.Conv2d(14 in_channels=S, out_channels=2*s*s*C,16 kernel_size=3, stride=1,padding=1,bias=False,),
+                 nn.PixelShuffle(s),
+            )
+        else:
+            self.filter = nn.Sequential(
+                nn.Conv2d(1, D, 5, 1, 2),
+                nn.Tanh(),
+                nn.Conv2d(D, S, 3, 1, 1),
+                nn.Tanh(),
+                nn.Conv2d(in_channels=S, out_channels=2*s*s*C, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.PixelShuffle(s),
+            )
+    def forward(self, input):
+        filtered = self.filter(input)
+        B, C, H, W = filtered.shape
+        filtered = filtered.view(B, 2, C, H, W)
+        upscaling = filtered[:, 0]
+        matching = filtered[:, 1]
+        return torch.sum(upscaling * self.softmax(matching),dim=1, keepdim=True)
+```
+
+### 实验
+
+
+
+---
+
+## 分析
+
+虽然从结果来看这么大开销比bicubic方法好的有限，但是文章中的小型网络优化策略值得参考，去掉PixelShuffle部分就是输入输出同尺寸的模型，可用于降噪等场景。
+
+此外文章实验部分很棒。
