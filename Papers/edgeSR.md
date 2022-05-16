@@ -176,12 +176,28 @@ class edgeSR_CNN(nn.Module):
 
 ### 实验
 
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_5_Figure_7.png)
 
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_9_Figure_13.png)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_12_Figure_19.png)
+
+上图是文章为了评测推理性能进行实验的结果。给出了在不同硬件设备上的推理速度和质量，不同评价指标（PSNR，SSIM）的结果.
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_6_Table_2.png)
+
+上图给出了模型不同超参数下的一些结果统计。
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_7_Figure_9.png)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/e1b1c5707aa288169be83aa6bc81126d_7_Figure_10.png)
+
+上图是我认为有意思的实验，可视化效果很直观。首先将eSR-TM模型中的filter分别以空域和频域的方式做了可视化，还一步步做了一张图片下的matching结果、upscaling结果以及按注意力权重加权结果做了可视化。
 
 ---
 
 ## 分析
 
-虽然从结果来看这么大开销比bicubic方法好的有限，但是文章中的小型网络优化策略值得参考，去掉PixelShuffle部分就是输入输出同尺寸的模型，可用于降噪等场景。
+从结果来看eSR-TM是个比较TradeOff的网络，虽然测试结果比bicubic方法好的有限，但是文章中的小型网络优化策略值得参考，且去掉PixelShuffle部分就是输入输出同尺寸的模型，可用于降噪等场景。
 
-此外文章实验部分很棒。
+此外文章实验做的详尽，可视化部分很棒。
