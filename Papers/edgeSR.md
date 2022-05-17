@@ -16,7 +16,8 @@ arxiv link: https://arxiv.org/pdf/2108.10335.pdf
     </div>
 </center>
 
-1. 面向端侧设备推出了网络结构极小的超分模型并取得不错效果
+1. 面向端侧设备推出了网络结构极小的超分模型取得TradeOff的效果
+2. 做的详细的实验和可视化效果
 
 ---
 
@@ -196,7 +197,7 @@ class edgeSR_CNN(nn.Module):
 
 ---
 
-## 分析
+## Conclusion
 
 从结果来看eSR-TM是个比较TradeOff的网络，虽然测试结果比bicubic方法好的有限，但是文章中的小型网络优化策略值得参考，且去掉PixelShuffle部分就是输入输出同尺寸的模型，可用于降噪等场景。
 
