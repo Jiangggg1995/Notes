@@ -1,13 +1,6 @@
 # Denoising Survey
 
 paper link [Deep Learning on Image Denoising: An overview (readpaper.com)](https://readpaper.com/paper/2998718015)
-
-## Dataset
-
-[ Waterloo Exploration Database](https://readpaper.com/paper/2556068545)
-
-[ polyU-Real-World-Noisy-Images datasets](https://readpaper.com/paper/2795722336)
-
 ---
 
 ## Problem
@@ -32,15 +25,49 @@ paper link [Deep Learning on Image Denoising: An overview (readpaper.com)](https
 
 ---
 
+## Dataset
+
+[ Waterloo Exploration Database](https://readpaper.com/paper/2556068545)
+
+[polyU-Real-World-Noisy-Images datasets](https://readpaper.com/paper/2795722336)
+
+数据集制作方法：
+
+1. 图片加人工噪声（如加性高斯白噪声）
+
+2. 高ISO长曝光/低ISO短曝光，制作数据集
+
+---
+
 ## Traditional methods
 
 ### 单帧降噪
 
-速度快：均值/中值/高斯滤波，小波滤波，Bilateral Filter， Guided Filter， Domain Transform Filter， Adaptive Manifold Filter
+**速度快**：均值/中值/高斯滤波，小波滤波，Bilateral Filter， Guided Filter， Domain Transform Filter， Adaptive Manifold Filter等
+
+<center>
+   <img style="border-radius: 0.3125em;
+    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);" src="https://github.com/Jiangggg1995/Notes/blob/main/images/filters.png?raw=true" width = "65%" alt=""/>
+    <br>
+    <div style="color:orange; border-bottom: 1px solid #d9d9d9;
+    display: inline-block;
+    color: #999;
+    padding: 2px;">
+      Figure 1. 均值/中值/高斯滤波
+    </div>
+</center>
+
+双边滤波简介：以高斯滤波来看，其intuition在于认为像素在空间域上变化缓慢，所以利用其像素点周围像素的距离赋予其权重。但是这中思路在图像边缘部分是不妥的，边缘部分像素值差异很大，继续按照空间距离来赋权会带来边缘模糊的问题。
+
+双边滤波的处理思路是将同时考虑像素点的空域（domain）信息和值域（range）信息，即如果相邻像素值差距很大，即使距离很近也会被赋予很低的权重，从而解决边缘模糊问题。
 
 举例：[Multiresolution Bilateral Filtering for Image Denoising (readpaper.com)](https://readpaper.com/paper/2100925004)
 
-效果好：统计模型， Low Rank， 稀疏编码， 字典学习， 自相似， 自相似+变换域
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/08c14da43c2fb9eb46c2ee68837d8537_3_Figure_5.png)
+
+双边滤波+小波
+
+**效果好**：统计模型， Low Rank， 稀疏编码， 字典学习， 自相似， 自相似+变换域
 
 举例：BM3D算法
 
@@ -50,10 +77,6 @@ paper link [Deep Learning on Image Denoising: An overview (readpaper.com)](https
 
 举例： [Google HDR+](https://readpaper.com/paper/2552290192)
 
-
-
 ## Deep Learning methods
 
 ### DnCNN
-
-
