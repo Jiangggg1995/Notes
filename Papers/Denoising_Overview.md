@@ -32,13 +32,9 @@
 
 [polyU-Real-World-Noisy-Images datasets](https://readpaper.com/paper/2795722336)
 
-数据集制作方法：
-
-1. 图片加人工噪声（如加性高斯白噪声）
-
-2. 高ISO长曝光/低ISO短曝光，制作数据集
-
 ---
+
+<div STYLE="page-break-after: always;"></div>
 
 ## Traditional methods
 
@@ -97,6 +93,8 @@ Step2：**开始**第二步中的聚合过程与第一步类似，不同的是�
 举例： [Google HDR+](https://readpaper.com/paper/2552290192)
 
 ---
+
+<div STYLE="page-break-after: always;"></div>
 
 ## Deep Learning methods
 
@@ -184,13 +182,53 @@ k-sigma变换公式推导：
 
 [PMRID](https://github.com/MegEngine/PMRID.git)
 
+---
+
+<div STYLE="page-break-after: always;"></div>
+
 ## Some idea
 
 ### 1.模型小型化
 
+模型小型化对运算速度和硬件成本有着最直接的影响，如何在确保效果的情况下把模型做小是工作的重要方向。从其他论文中借鉴了一些不错的小型化模型结构供参考：
+
+1.[edge-SR](https://arxiv.org/pdf/2108.10335.pdfhttps://arxiv.org/pdf/2108.10335.pdf)中的eSR-TM模型
+
+![](https://static.cdn.readpaper.com/aiKnowledge/screenshot/2022-05-14/eb1717ba65234d5f8b1846497d4c8d2a-18355445-c149-48c8-a203-560cc9829e4f.png)
+
+2.[dh_isp](https://readpaper.com/pdf-annotate/note?noteId=691056777091895296&pdfId=4558136780486877185)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_4_Figure_3.png)
+
+3.[AIISP](https://readpaper.com/pdf-annotate/note?noteId=691056777091895296&pdfId=4558136780486877185)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_5_Figure_4.png)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_5_Figure_5.png)
+
+4.[ENERZAi](https://readpaper.com/pdf-annotate/note?noteId=691056777091895296&pdfId=4558136780486877185)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_6_Figure_6.png)
+
+5.[isp_forever](https://readpaper.com/pdf-annotate/note?noteId=691056777091895296&pdfId=4558136780486877185)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_6_Figure_8.png)
+
+6.[CVML](https://readpaper.com/pdf-annotate/note?noteId=691056777091895296&pdfId=4558136780486877185)
+
+![](https://pdf.cdn.readpaper.com/parsed/fetch_target/a300bacf9a070a958c5a4d95af106f9a_7_Figure_10.png)
+
 ### 2.变换域的探究
 
+传统方法中将图像从空间域转到其他域进行去噪是有效且常见的。旷世的那篇论文在深度学习方法中也采用了k-sigma变换这种类似的域变换方法。能否将深度学习和域变换两种有效方法耦合起来是接下来工作中可以探究的一个点。
+
 ### 3.数据集和损失函数
+
+跟目标检测这种任务不一样的是，去噪的数据集的label并不是很统一。有效的数据集对模型效果应该会有很重要的影响。常见的去噪数据集制作方法有：1.图片加人工噪声（如加性高斯白噪声）；2.高ISO长曝光/低ISO短曝光，制作数据集。如何制作出最贴近ISP数据中噪声数据集也是可探究的点。
+
+上述论文中采用的损失函数多为L1 loss和MSE loss。而PSNR和SSIM作为评价指标这些年也备受争议，因为实验中发现L1 loss有助于提高PSNR表现，但是PSNR高的结果并不一定符合人类观感中对图像“高质量”的评价。如何用某种指标量化人类视觉中的“高质量”感受很重要，据说这也是荣耀手机的AIISP团队主要工作方向。
+
+此外有文章提到tanh比relu在小型网络中表现更好，可以作为实验点探究。
 
 ---
 
