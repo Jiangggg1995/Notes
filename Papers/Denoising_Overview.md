@@ -62,11 +62,11 @@
 
 [双边滤波的一种快速实现](https://github.com/ufoym/recursive-bf)
 
+小波变换简介：傅里叶是将信号分解成一系列不同频率的正余弦函数的叠加，同样小波变换是将信号分解为一系列的小波函数的叠加(或者说不同尺度、时间的小波函数拟合)，而这些小波函数都是一个母小波经过平移和尺度伸缩得来的。小波变换不同于傅里叶变换的地方是傅里叶函数是分解成正弦波，而小波变换的小波母函数可以不同，不同的小波母函数的变换结果也不尽相同。符合小波特征的函数都可以作为小波母函数。
+
 举例：[Multiresolution Bilateral Filtering for Image Denoising (readpaper.com)](https://readpaper.com/paper/2100925004)
 
 ![](https://pdf.cdn.readpaper.com/parsed/fetch_target/08c14da43c2fb9eb46c2ee68837d8537_3_Figure_5.png)
-
-概述：双边滤波+小波(小波变换原理todo)
 
 **效果好**：统计模型， Low Rank， 稀疏编码， 字典学习， 自相似， 自相似+变换域
 
