@@ -94,8 +94,6 @@ int main()
 }
 ```
 
-
-
 输出：\_\_FILE\_\_ is the file name:/mnt/d/Code/learn_c/main.cpp
             \_\_FUNCTION\_\_ is the function name:hello
             \_\_LINE\_\_ is the line: 6
@@ -197,3 +195,7 @@ int main(){
 2 4 8 16 32 64 128 256 512 1024* 
 
 注意：`[=]`可以是`=`或`&`，表示`{}`中用到的、定义在`{}`外面的变量在`{}`中是否允许被改变。`=`表示不允许，`&`表示允许。
+
+---
+
+## 类型转换
