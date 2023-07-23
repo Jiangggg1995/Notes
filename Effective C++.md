@@ -51,4 +51,66 @@ const修饰成员函数代表该成员函数由const对象调用。
 
 # 7.了解c++默默编写并调用了哪些函数
 如果你自定义一个类且没有做对应的声明且对应函数被调用，则编译器会为它声明一个default构造函数、copy构造函数、copy赋值和一个析构函数。且这些函数都是public且inline。
+编译器自动生成的copy构造函数只是简单的将源对象的每一个non-static成员变量拷贝到目标对象。（会自动嵌套的调用 成员的copy构造函数。）
 
+# 8.若不想编译器自动生成函数，应该明确的拒绝
+上面说过当default的构造函数、copy构造函数和copy赋值等没有被定义但是被调用的时候，编译器会自动生成对应的函数。而在一些场景下我们不希望这几个函数被调用，自然也就不希望编译器自动生成对应函数，这个时候我们应当明确的拒绝编译器生成对应函数。
+其方法有二：
+1. 主动以private方式声明对应函数
+```c++
+//define these funcs by private
+class HomeForSale {
+public:
+	//...
+private:
+	//...
+	HomeForSale(const HomeForSale&);
+	HomeForSale& operator=(const HomeForSale&);
+}
+```
+2.  定义一个专门阻止copying的base class。所有需要明确拒绝编译器自动生成的类由该基类派生。
+```c++
+class Uncopyable{
+protected:
+	Uncopyable(){}
+	~Uncopyable(){}
+private:
+	Uncopyable(const Uncopyable&);
+	Uncopyable& operator=(const Uncopyable&);
+}
+
+class HomeForSale: private Uncopyable{
+	//...
+}
+```
+
+# 9.为多态基类声明virtual析构函数
+假设如下基类和派生类
+```c++
+class TimeKeeper{
+public:
+	TimeKeeper();
+	~TimeKeeper();
+}
+
+class AtomicClock:public TimeKeeper{...}
+
+TimeKeeper* ptk = new AtomicClock();
+delete ptk;
+```
+上述问题在于基类指针TimeKeeper* 指向了一个派生类实例，我们delete基类指针会导致未定义的行为。可能的情况是派生类可能会有自己的成员，这样的delete可能会局部销毁派生类的基类部分，形成”局部销毁“情况，最终造成资源泄露。
+避免这种情况的办法是给base class一个virtual 析构函数。
+```c++
+```c++
+class TimeKeeper{
+public:
+	TimeKeeper();
+	virtual ~TimeKeeper(); // virtual function
+}
+
+class AtomicClock:public TimeKeeper{...}
+
+TimeKeeper* ptk = new AtomicClock();
+delete ptk;
+```
+除了virtual析构函数外，base class可能含有其他virtual函数。*__任何class只要带有virtual函数，都应当也有一个virtual析构函数。__* 当class不被作为base class时不应当将其析构函数设为virtual。不要继承标准容器或其他带有non virtual析构函数的class。*__纯虚析构函数需要一个空的定义。__*
