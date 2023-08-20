@@ -1040,4 +1040,855 @@ int sc_main(int, char*[]) {
 11 s: catches eq
 12 s: catches eq***
 # Combined Event Queue
+1. 多个事件队列可以通过"或"操作组合成进程的静态灵敏度。 在静态灵敏度中不能使用"与"操作。
+2. Event Queue不能用作wait()函数的输入，因此不能用于动态灵敏度。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(QUEUE_COMBINED) {
+  sc_event_queue eq1, eq2;
+  SC_CTOR(QUEUE_COMBINED) {
+    SC_THREAD(trigger);
+    SC_THREAD(catcher);
+    sensitive << eq1 << eq2; // eq1 "or" eq2, cannot "and"
+    dont_initialize();
+  }
+  void trigger() {
+    eq1.notify(1, SC_SEC); // eq1 at 1 s
+    eq1.notify(2, SC_SEC); // eq1 at 2 s
+    eq2.notify(2, SC_SEC); // eq2 at 2 s
+    eq2.notify(3, SC_SEC); // eq2 at 3 s
+  }
+  void catcher() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": catches trigger" << std::endl;
+      wait(); // cannot use event queue in dynamic sensitivity
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  QUEUE_COMBINED combined("combined");
+  sc_start();
+  return 0;
+}
+```
+上面代码输出结果:
+***1 s: catches trigger
+2 s: catches trigger
+3 s: catches trigger***
+# Mutex
+互斥锁：
+1. 是一个预定义的信道，用于模拟多个并发进程共享的资源上的互斥锁的行为。
+2. 应处于以下两个独占状态之一：解锁或锁定： 
+    a) 一个进程一次只能锁定给定的互斥锁。
+    b) 互斥锁只能由锁定它的进程解锁。在解锁后，互斥锁可以被另一个进程锁定。
+
+成员函数：
+1. int lock(): 
+    a) 如果互斥锁未锁定，lock()将锁定互斥锁并返回。 
+    b) 如果互斥锁已锁定，lock()将挂起，直到互斥锁被另一个进程解锁。 
+    c) 如果多个进程在同一周期尝试锁定互斥锁，那么哪个进程实例获得锁的选择将是不确定的。 
+    d) 无条件返回值0。
+2. int trylock(): 
+    a) 如果互斥锁未锁定，trylock()将锁定互斥锁并返回值0。
+    b) 如果互斥锁已锁定，trylock()将立即返回值–1。互斥锁保持锁定状态。
+3. int unlock(): 
+    a) 如果互斥锁未锁定，unlock()将返回值–1。互斥锁保持未锁定状态。 
+    b) 如果互斥锁是由调用进程之外的其他进程实例锁定的，unlock()将返回值–1。互斥锁保持锁定状态。 
+    c) 如果互斥锁是由调用进程锁定的，member函数unlock()将解锁互斥锁并返回值0。
+解锁互斥锁后会向其他进程发出即时通知。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MUTEX) {
+  sc_mutex m;
+  SC_CTOR(MUTEX) {
+    SC_THREAD(thread_1);
+    SC_THREAD(thread_2);
+  }
+  void thread_1() {
+    while (true) {
+      if (m.trylock() == -1) { // try to lock the mutex
+        m.lock(); // failed, wait to lock
+        std::cout << sc_time_stamp() << ": thread_1 obtained resource by lock()" << std::endl;
+      } else { // succeeded
+        std::cout << sc_time_stamp() << ": thread_1 obtained resource by trylock()" << std::endl;
+      }
+      wait(1, SC_SEC); // occupy mutex for 1 s
+      m.unlock(); // unlock mutex
+      std::cout << sc_time_stamp() << ": unlocked by thread_1" << std::endl;
+      wait(SC_ZERO_TIME); // give time for the other process to lock the mutex
+    }
+  }
+  void thread_2() {
+    while (true) {
+      if (m.trylock() == -1) { // try to lock the mutex
+        m.lock(); // failed, wait to lock
+        std::cout << sc_time_stamp() << ": thread_2 obtained resource by lock()" << std::endl;
+      } else { // succeeded
+        std::cout << sc_time_stamp() << ": thread_2 obtained resource by trylock()" << std::endl;
+      }
+      wait(1, SC_SEC); // occupy mutex for 1 s
+      m.unlock(); // unlock mutex
+      std::cout << sc_time_stamp() << ": unlocked by thread_2" << std::endl;
+      wait(SC_ZERO_TIME); // give time for the other process to lock the mutex
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  MUTEX mutex("mutex");
+  sc_start(4, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: thread_1 obtained resource by trylock()
+1 s: unlocked by thread_1
+1 s: thread_2 obtained resource by lock()
+2 s: unlocked by thread_2
+2 s: thread_1 obtained resource by lock()
+3 s: unlocked by thread_1
+3 s: thread_2 obtained resource by lock()***
+# Semaphore
+信号量：
+1. 是一个预定义的信道，用于模拟软件信号量的行为，以提供对共享资源的有限并发访问。
+2. 具有整数值，称为信号量值，在构造信号量时设置为允许的并发访问数量。如果信号量初始值为1，则信号量等同于互斥锁。
+
+成员函数：
+1. int wait(): 
+    a) 如果信号量值大于0，wait()将减小信号量值并返回。 
+    b) 如果信号量值等于0，wait()将挂起，直到信号量值被其他进程增加（通过另一个进程）。 
+    c) 无条件返回值0。
+2. int trywait(): 
+   a) 如果信号量值大于0，trywait()将减小信号量值并返回值0。 
+   b) 如果信号量值等于0，trywait()将立即返回值–1，而不修改信号量值。
+3. int post(): 
+   a) 将增加信号量值。 
+   b) 将使用立即通知向任何等待的进程发出信号，表示增加信号量值的行为。 
+   c) 无条件返回值0。
+4. int get_value(): 
+    a) 应返回信号量值。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(SEMAPHORE) {
+  sc_semaphore s; // declares semaphore
+  SC_CTOR(SEMAPHORE) : s(2) { // init semaphore with 2 resources
+    SC_THREAD(thread_1); // register 3 threads competing for resources
+    SC_THREAD(thread_2);
+    SC_THREAD(thread_3);
+  }
+  void thread_1() {
+    while (true) {
+      if (s.trywait() == -1) { // try to obtain a resource
+        s.wait(); // if not successful, wait till resource is available
+      }
+      std::cout<< sc_time_stamp() << ": locked by thread_1, value is " << s.get_value() << std::endl;
+      wait(1, SC_SEC); // occupy resource for 1 s
+      s.post(); // release resource
+      std::cout<< sc_time_stamp() << ": unlocked by thread_1, value is " << s.get_value() << std::endl;
+      wait(SC_ZERO_TIME); // give time for the other process to lock
+    }
+  }
+  void thread_2() {
+    while (true) {
+      if (s.trywait() == -1) { // try to obtain a resource
+        s.wait(); // if not successful, wait till resource is available
+      }
+      std::cout<< sc_time_stamp() << ": locked by thread_2, value is " << s.get_value() << std::endl;
+      wait(1, SC_SEC); // occupy resource for 1 s
+      s.post(); // release resource
+      std::cout<< sc_time_stamp() << ": unlocked by thread_2, value is " << s.get_value() << std::endl;
+      wait(SC_ZERO_TIME); // give time for the other process to lock
+    }
+  }
+  void thread_3() {
+    while (true) {
+      if (s.trywait() == -1) { // try to obtain a resource
+        s.wait(); // if not successful, wait till resource is available
+      }
+      std::cout<< sc_time_stamp() << ": locked by thread_3, value is " << s.get_value() << std::endl;
+      wait(1, SC_SEC); // occupy resource for 1 s
+      s.post(); // release resource
+      std::cout<< sc_time_stamp() << ": unlocked by thread_3, value is " << s.get_value() << std::endl;
+      wait(SC_ZERO_TIME); // give time for the other process to lock
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  SEMAPHORE semaphore("semaphore");
+  sc_start(4, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: locked by thread_1, value is 1
+0 s: locked by thread_2, value is 0
+1 s: unlocked by thread_1, value is 1
+1 s: unlocked by thread_2, value is 2
+1 s: locked by thread_3, value is 1
+1 s: locked by thread_2, value is 0
+2 s: unlocked by thread_3, value is 1
+2 s: unlocked by thread_2, value is 2
+2 s: locked by thread_1, value is 1
+2 s: locked by thread_2, value is 0
+3 s: unlocked by thread_1, value is 1
+3 s: unlocked by thread_2, value is 2
+3 s: locked by thread_3, value is 1
+3 s: locked by thread_2, value is 0***
+# FIFO
+sc_fifo是一个预定义的原始信道，用于模拟FIFO（先进先出）缓冲区的行为。它具有固定数量容积来存储数据。它实现了sc_fifo_in_if<\T> 接口和the sc_fifo_out_if<\T> 接口。
+
+构造函数：
+1. explicit sc_fifo(int size_ = 16): 调用基类的构造函数。
+2. explicit sc_fifo(const char* name_, int size_ = 16): 调用基类的构造函数，使用给定的名称初始化字符串。
+两个构造函数都通过size_参数初始固定容量。这个容量的size应该大于0。
+
+成员函数：
+1. void read(T&), T read(): 
+    a) 返回最近写入fifo的值，并从fifo中移除该值，使其无法再次读取。 
+    b) 从fifo中读取值的顺序应与写入fifo的顺序完全匹配。 
+    c) 在当前delta周期中写入fifo的值在该周期内不可读，但会在下一个delta周期中变为可读。 
+    d) 如果fifo为空，则读取事件挂起，直到被通知写入事件完成。
+2. bool nb_read(T&): 
+    a), b), c) 与read()相同 
+    d) 如果fifo为空，nb_read()函数会立即返回，不修改fifo的状态，不调用request_update，并返回false。否则，如果可以从fifo中读取值，nb_read()的返回值为true。
+3. operator T(): 等价于 "operator T() {return read();}"
+
+成员函数：
+1. write(const T&): 
+    a) 将作为参数传递的值写入fifo。 
+    b) 可以在单个delta周期内写入多个值。 
+    c) 如果在同一delta周期中从fifo中读取了值，则在创建的空插槽中的值不会在下一个delta周期中变为可写。 
+    d) 如果fifo已满，write()函数会在数据读取事件通知之前挂起。
+2. bool nb_write(const T&): 
+    a), b), c) 与write()相同 
+    d) 如果fifo已满，nb_write()函数会立即返回，不修改fifo的状态，不调用request_update，并返回false。否则，nb_write()的返回值为true。
+3. operator=: 等价于 "sc_fifo& operator= (const T& a) {write(a); return *this;}"
+
+成员函数：
+1. sc_event& data_written_event(): 应返回对数据写入事件的引用，该事件在delta通知阶段通知，即在写入值到fifo的delta周期结束时发生。
+2. sc_event& data_read_event(): 应返回对数据读取事件的引用，该事件在delta通知阶段通知，即在从fifo中读取值的delta周期结束时发生。
+
+成员函数：
+1. int num_available(): 返回当前delta周期中可用于读取的值的数量。计算不包括在当前delta周期中读取的值，但不包括在当前delta周期中写入的值。
+2. int num_free(): 返回当前delta周期中可用于写入的空闲容积的数量。计算不包括在当前delta周期中写入的容积，但不包括由读取在当前delta周期中产生的空闲容积。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(FIFO) {
+  sc_fifo<int> f1, f2, f3;
+  SC_CTOR(FIFO) : f1(2), f2(2), f3(2) { // fifo with size 2
+    SC_THREAD(generator1);
+    SC_THREAD(consumer1);
+
+    SC_THREAD(generator2);
+    SC_THREAD(consumer2);
+
+    SC_THREAD(generator3);
+    SC_THREAD(consumer3);
+  }
+  void generator1() { // blocking write
+    int v = 0;
+    while (true) {
+      f1.write(v); // same as f = v, which is not recommended.
+      std::cout << sc_time_stamp() << ": generator1 writes " << v++ << std::endl;
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void consumer1() { // blocking read
+    int v = -1;
+    while (true) {
+      f1.read(v); // same as v = int(f), which is not recommended; or, v = f1.read();
+      std::cout << sc_time_stamp() << ": consumer1 reads " << v << std::endl;
+      wait(3, SC_SEC); // read every 3 s, fifo will fill up soon
+    }
+  }
+  void generator2() { // non-blocking write
+    int v = 0;
+    while (true) {
+      while (f2.nb_write(v) == false ) { // nb write until succeeded
+        wait(f2.data_read_event()); // if not successful, wait for data read (a fifo slot becomes available)
+      }
+      std::cout << sc_time_stamp() << ": generator2 writes " << v++ << std::endl;
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void consumer2() { // non-blocking read
+    int v = -1;
+    while (true) {
+      while (f2.nb_read(v) == false) {
+        wait(f2.data_written_event());
+      }
+      std::cout << sc_time_stamp() << ": consumer2 reads " << v << std::endl;
+      wait(3, SC_SEC); // read every 3 s, fifo will fill up soon
+    }
+  }
+  void generator3() { // free/available slots before/after write
+    int v = 0;
+    while (true) {
+      std::cout << sc_time_stamp() << ": generator3, before write, #free/#available=" << f3.num_free() << "/" << f3.num_available() << std::endl;
+      f3.write(v++);
+      std::cout << sc_time_stamp() << ": generator3, after write, #free/#available=" << f3.num_free() << "/" << f3.num_available() << std::endl;
+      wait(1, SC_SEC);
+    }
+  }
+  void consumer3() { // free/available slots before/after read
+    int v = -1;
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer3, before read, #free/#available=" << f3.num_free() << "/" << f3.num_available() << std::endl;
+      f3.read(v);
+      std::cout << sc_time_stamp() << ": consumer3, after read, #free/#available=" << f3.num_free() << "/" << f3.num_available() << std::endl;
+      wait(3, SC_SEC); // read every 3 s, fifo will fill up soon
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  FIFO fifo("fifo");
+  sc_start(10, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: generator1 writes 0
+0 s: generator2 writes 0
+0 s: generator3, before write, #free/#available=2/0
+0 s: generator3, after write, #free/#available=1/0
+0 s: consumer3, before read, #free/#available=1/0
+0 s: consumer1 reads 0
+0 s: consumer2 reads 0
+0 s: consumer3, after read, #free/#available=1/0
+1 s: generator1 writes 1
+1 s: generator2 writes 1
+1 s: generator3, before write, #free/#available=2/0
+1 s: generator3, after write, #free/#available=1/0
+2 s: generator1 writes 2
+2 s: generator2 writes 2
+2 s: generator3, before write, #free/#available=1/1
+2 s: generator3, after write, #free/#available=0/1
+3 s: consumer3, before read, #free/#available=0/2
+3 s: consumer3, after read, #free/#available=0/1
+3 s: generator3, before write, #free/#available=0/1
+3 s: consumer1 reads 1
+3 s: consumer2 reads 1
+3 s: generator3, after write, #free/#available=0/1
+3 s: generator1 writes 3
+3 s: generator2 writes 3
+4 s: generator3, before write, #free/#available=0/2
+6 s: consumer1 reads 2
+6 s: consumer3, before read, #free/#available=0/2
+6 s: consumer3, after read, #free/#available=0/1
+6 s: consumer2 reads 2
+6 s: generator1 writes 4
+6 s: generator3, after write, #free/#available=0/1
+6 s: generator2 writes 4
+7 s: generator3, before write, #free/#available=0/2
+9 s: consumer3, before read, #free/#available=0/2
+9 s: consumer3, after read, #free/#available=0/1
+9 s: consumer1 reads 3
+9 s: consumer2 reads 3
+9 s: generator3, after write, #free/#available=0/1
+9 s: generator1 writes 5
+9 s: generator2 writes 5***
+# Signal: read and write
+sc_signal:
+1. 是一个预定义的原始信道，用于模拟携带数电信号的线路的行为。
+2. 它使用evaluate-update方案来确保在同时进行读取和写入操作时的行为是确定的。我们维护一个当前值和新值。
+3. 它的write()方法将在新值与当前值不同时提交更新请求。
+4. 它实现了sc_signal_inout_if接口。
+
+构造函数：
+1. `sc_signal()`: 
+    从其初始化器列表中调用基类的构造函数，如下所示`sc_prim_channel(sc_gen_unique_name("signal"))`
+3. `sc_signal(const char* name_)`: 
+    从其初始化器列表中调用基类的构造函数，如下所示：`sc_prim_channel(name_)`
+
+成员函数：
+1. T& read() 或 operator const T&(): 
+    返回信号的当前值的引用，但不应修改信号的状态。
+2. void write(const T&): 
+    修改信号的值，使信号在下个delta周期中具有新值（如成员函数read返回的值），但在此之前不变。
+3. operator=: 
+    等同于write()。
+4. sc_event& default_event(), sc_event& value_changed_event(): 
+    返回值更改事件的引用。
+5. bool event(): 
+    如果且仅当在前一个delta周期的更新阶段以及当前仿真时间信号的值发生了改变，则返回true。
+
+与fifo相比：
+1. sc_signal只有一个容量用于读写
+2. sc_signal只在新值与当前值不同时触发更新请求
+3. 从sc_signal中读取不会移除值
+
+除了执行阶段外，sc_signal:
+1. 可以在推导期间编写以初始化信号的值。
+2. 可以在推导期间或仿真暂停时从函数sc_main编写，即在调用函数sc_start之前或之后。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(SIGNAL) {
+  sc_signal<int> s;
+  SC_CTOR(SIGNAL) {
+    SC_THREAD(readwrite);
+  }
+  void readwrite() {
+    s.write(3);
+    std::cout << "s = " << s << "; " << s.read() << std::endl;
+    wait(SC_ZERO_TIME);
+    std::cout << "after delta_cycle, s = " << s << std::endl;
+    
+    s = 4;
+    s = 5;
+    int tmp = s;
+    std::cout << "s = " << tmp << std::endl;
+    wait(SC_ZERO_TIME);
+    std::cout << "after delta_cycle, s = " << s.read() << std::endl;
+  }
+};
+
+int sc_main(int, char*[]) {
+  SIGNAL signal("signal");
+  signal.s = -1;
+  sc_start();
+  return 0;
+}
+```
+上面代码输出结果:
+***s = -1; -1
+after delta_cycle, s = 3
+s = 3
+after delta_cycle, s = 5***
+# Signal: detect event
+1. `sc_event& default_event(), sc_event& value_changed_event()`: 
+    返回对值更改事件的引用。
+2. `bool event()`: 此函数在以下情况下返回true：
+    仅当在前一个delta周期的更新阶段以及当前仿真时间中信号的值发生变化时，才返回true。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(SIGNAL_EVENT) {
+  sc_signal<int> s1, s2; // defines two signal channels
+  SC_CTOR(SIGNAL_EVENT) {
+    SC_THREAD(producer1);
+    SC_THREAD(producer2);
+    SC_THREAD(consumer); // consumer sensitive to (s1 OR s2)
+    sensitive << s1 << s2; // same as: sensitive << s1.default_event() << s2.value_changed_event();
+    dont_initialize();
+  }
+  void producer1() {
+    int v = 1;
+    while (true) {
+      s1.write(v++); // write to s1
+      wait(2, SC_SEC);
+    }
+  }
+  void producer2() {
+    int v = 1;
+    while (true) {
+      s2 = v++; // write to s2
+      wait(3, SC_SEC);
+    }
+  }
+  void consumer() {
+    while (true) {
+      if ( s1.event() == true && s2.event() == true) { // both triggered
+        std::cout << sc_time_stamp() << ": s1 & s2 triggered" << std::endl; 
+      } else if (s1.event() == true) { // only s1 triggered
+        std::cout << sc_time_stamp() << ": s1 triggered" << std::endl; 
+      } else { // only s2 triggered
+        std::cout << sc_time_stamp() << ": s2 triggered" << std::endl; 
+      }
+      wait();
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  SIGNAL_EVENT signal_event("signal_event");
+  sc_start(7, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: s1 & s2 triggered
+2 s: s1 triggered
+3 s: s2 triggered
+4 s: s1 triggered
+6 s: s1 & s2 triggered***
+# Signal: many writers
+sc_signal的类定义：
+`template <class T, sc_writer_policy WRITER_POLICY = SC_ONE_WRITER> class sc_signal: public sc_signal_inout_if<T>, public sc_prim_channel {}`
+
+1. 如果 WRITER_POLICY == SC_ONE_WRITER，则在仿真过程中的任何时候从多个进程实例写入给定的信号实例都应视为错误。
+2. 如果 WRITER_POLICY == SC_MANY_WRITERS: 
+    a) 在任何给定的评估阶段，从多个进程实例写入给定的信号实例都应视为错误。 
+    b) 但不同的进程实例可能在不同的delta周期中写入给定的信号实例。
+因此，默认情况下，一个sc_signal只有一个写入者；当声明为MANY_WRITERS时，多个写入者可以在不同时间写入信号通道。
+至于消费者，一个sc_signal可以有多个消费者。它们可以在同一时间或不同时间从信号通道读取。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MULTI) {
+  sc_signal<int> s1; // a single-writer signal
+  sc_signal<int, SC_MANY_WRITERS> s2; // a multi-writer signal
+  SC_CTOR(MULTI) {
+    SC_THREAD(writer1); // writes to s1
+    SC_THREAD(writer2); // writes to s1 and s2
+    SC_THREAD(consumer1);
+    sensitive << s1; // sensitive to s1
+    dont_initialize();
+    SC_THREAD(consumer2);
+    sensitive << s1 << s2; // sensitive to s1 and s2
+    dont_initialize();
+  }
+  void writer1() {
+    int v = 1; // init value
+    while (true) {
+      s1.write(v); // write to s1
+      s2.write(v); // write to s2
+      std::cout << sc_time_stamp() << ": writer1 writes " << v++ << std::endl;
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void writer2() {
+    int v = -1; // init value
+    while (true) {
+      // s1.write(v); /* cannot, otherwise runtime error: (E115) sc_signal<T> cannot have more than one driver*/
+      wait(SC_ZERO_TIME); // needed to offset the write time. Otherwise runtime error: conflicting write in delta cycle 0 
+      s2.write(v); // write to s2
+      std::cout << sc_time_stamp() << ": writer2 writes " << v-- << std::endl;
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void consumer1() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer1 reads s1=" << s1.read() << "; s2=" << s2.read() << std::endl; // read s1 and s2
+      wait(); // wait for s1
+    }
+  }
+  void consumer2() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer2 reads s1=" << s1.read() << "; s2=" << s2.read() << std::endl; // read s1 and s2
+      wait(); // wait for s1 or s2
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  MULTI consumers("consumers");
+  sc_start(2, SC_SEC); // run simulation for 2 s
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: writer1 writes 1
+0 s: consumer2 reads s1=1; s2=1
+0 s: consumer1 reads s1=1; s2=1
+0 s: writer2 writes -1
+0 s: consumer2 reads s1=1; s2=-1
+1 s: writer1 writes 2
+1 s: consumer2 reads s1=2; s2=2
+1 s: consumer1 reads s1=2; s2=2
+1 s: writer2 writes -2
+1 s: consumer2 reads s1=2; s2=-2***
+# Resolved Signal
+Resolved Signal是一个类sc_signal_resolved或类sc_signal_rv实例化的对象。它与sc_signal的区别在于，Resolved Signal可能被多个进程写入，冲突的值在通道内解析。
+1. sc_signal_resolved是从类sc_signal派生出来的预定义的原语通道。
+2. sc_signal_rv也是从类sc_signal派生出来的预定义的原语通道。
+    a) sc_signal_rv与sc_signal_resolved相似。
+    b) 不同的是，基类模板sc_signal的参数类型为sc_dt::sc_lv而不是sc_dt::sc_logic。
+
+类定义：
+1. `class sc_signal_resolved: public sc_signal<sc_dt::sc_logic,SC_MANY_WRITERS>`
+2. `template <int W> class sc_signal_rv: public sc_signal<sc_dt::sc_lv<W>,SC_MANY_WRITERS>`
+
+针对sc_signal_resolved的解析表：
+  | 0 | 1 | Z | X |
+0 | 0 | X | 0 | X |
+1 | X | 1 | 1 | X |
+Z | 0 | 1 | Z | X |
+X | X | X | X | X |
+
+简而言之，Resolved Signal通道可以同时被多个进程写入。这与只能每个delta周期被一个进程写入的sc_signal不同。
+```c++
+#include <systemc>
+#include <vector> // use c++  vector lib
+using namespace sc_core;
+using namespace sc_dt; // sc_logic defined here
+using std::vector; // use namespace for vector
+
+SC_MODULE(RESOLVED_SIGNAL) {
+  sc_signal_resolved rv; // a resolved signal channel
+  vector<sc_logic> levels; // declares a vector of possible 4-level logic values
+  SC_CTOR(RESOLVED_SIGNAL) : levels(vector<sc_logic>{sc_logic_0, sc_logic_1, sc_logic_Z, sc_logic_X}){ // init vector for possible 4-level logic values
+    SC_THREAD(writer1);
+    SC_THREAD(writer2);
+    SC_THREAD(consumer);
+  }
+  void writer1() {
+    int idx = 0;
+    while (true) {
+      rv.write(levels[idx++%4]); // 0,1,Z,X, 0,1,Z,X, 0,1,Z,X, 0,1,Z,X
+      wait(1, SC_SEC); // writes every 1 s
+    }
+  }
+  void writer2() {
+    int idx = 0;
+    while (true) {
+      rv.write(levels[(idx++/4)%4]); // 0,0,0,0, 1,1,1,1, Z,Z,Z,Z, X,X,X,X
+      wait(1, SC_SEC); // writes every 1 s
+    }
+  }
+  void consumer() {
+    wait(1, SC_SEC); // delay read by 1 s
+    int idx = 0;
+    while (true) {
+      std::cout << " " << rv.read() << " |"; // print the read value (writer1 and writer2 resolved)
+      if (++idx % 4 == 0) { std::cout << std::endl; } // print a new line every 4 values
+      wait(1, SC_SEC); // read every 1 s
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  RESOLVED_SIGNAL resolved("resolved");
+  sc_start(17, SC_SEC); // runs sufficient time to test all 16 resolve combinations
+  return 0;
+}
+```
+上面代码输出结果:
+***0 | X | 0 | X |
+X | 1 | 1 | X |
+0 | 1 | Z | X |
+X | X | X | X |***
+# sc_signal<\bool>
+sc_signal_in_if和sc_signal_in_if是提供适用于双值信号的额外成员函数的接口。 sc_signal实现了这些函数：
+1. posedge_event()返回对事件的引用，该事件在通道值发生变化并且新通道值为true或'1'时通知。
+2. negedge_event()返回对事件的引用，该事件在通道值发生变化并且新通道值为false或'0'时通知。
+3. posedge()在当前仿真时间上，仅当在前一个delta周期的更新阶段中通道值发生变化，并且新通道值为true或'1'时才返回true。
+4. negedge()在当前仿真时间上，仅当在前一个delta周期的更新阶段中通道值发生变化，并且新通道值为false或'0'时才返回true。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(SIGNAL_BOOL) {
+  sc_signal<bool> b;
+  SC_CTOR(SIGNAL_BOOL) {
+    SC_THREAD(writer);
+    SC_THREAD(consumer);
+    sensitive << b; // triggered by every value change
+    dont_initialize();
+    SC_THREAD(consumer_pos);
+    sensitive << b.posedge_event(); // triggered by value change to true
+    dont_initialize();
+    SC_THREAD(consumer_neg);
+    sensitive << b.negedge_event(); // triggered by value change to false
+    dont_initialize();
+  }
+  void writer() {
+    bool v = true;
+    while (true) {
+      b.write(v); // write to channel
+      v = !v; // toggle value
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void consumer() {
+    while (true) {
+      if (b.posedge()) { // if new value is true
+        std::cout << sc_time_stamp() << ": consumer receives posedge, b = " << b << std::endl;
+      } else { // if new value is false
+        std::cout << sc_time_stamp() << ": consumer receives negedge, b = " << b << std::endl;
+      }
+      wait(); // wait for any value change
+    }
+  }
+  void consumer_pos() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer_pos receives posedge, b = " << b << std::endl;
+      wait(); // wait for value change to true
+    }
+  }
+  void consumer_neg() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer_neg receives negedge, b = " << b << std::endl;
+      wait(); // wait for value change to false
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  SIGNAL_BOOL signal_bool("signal_bool");
+  sc_start(4, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: consumer_pos receives posedge, b = 1
+0 s: consumer receives posedge, b = 1
+1 s: consumer_neg receives negedge, b = 0
+1 s: consumer receives negedge, b = 0
+2 s: consumer_pos receives posedge, b = 1
+2 s: consumer receives posedge, b = 1
+3 s: consumer_neg receives negedge, b = 0
+3 s: consumer receives negedge, b = 0***
+# Buffer
+sc_buffer是从类sc_signal预定义的基本通道派生出来的原语通道。 
+它与类sc_signal的不同之处在于，每当缓冲区被写入时都会通知值更改事件，而不仅仅是当信号的值发生变化时才通知。 
+例如， 
+如果"signal"的当前值\==1，写入1不会触发值更新事件。 
+如果"buffer"的当前值\==1，写入1将触发值更新事件。
+```C++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(BUFFER) {
+  sc_signal<int> s; // declares a signal channel
+  sc_buffer<int> b; // declares a buffer channel
+  SC_CTOR(BUFFER) {
+    SC_THREAD(writer); // writes to both signal and buffer
+    SC_THREAD(consumer1);
+    sensitive << s; // triggered by signal
+    dont_initialize();
+    SC_THREAD(consumer2);
+    sensitive << b; // triggered by buffer
+    dont_initialize();
+  }
+  void writer() {
+    int val = 1; // init value
+    while (true) {
+      for (int i = 0; i < 2; ++i) { // write same value to channel twice
+        s.write(val); // write to signal
+        b.write(val); // write to buffer
+        wait(1, SC_SEC); // wait after 1 s
+      }
+      val++; // value change
+    }
+  }
+  void consumer1() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer1 receives " << s.read() << std::endl;
+      wait(); // receives from signal
+    }
+  }
+  void consumer2() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": consumer2 receives " << b.read() << std::endl;
+      wait(); // receives from buffer
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  BUFFER buffer("buffer");
+  sc_start(4, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: consumer1 receives 1
+0 s: consumer2 receives 1
+1 s: consumer2 receives 1
+2 s: consumer1 receives 2
+2 s: consumer2 receives 2
+3 s: consumer2 receives 2***
+# Communication: port
+三个关键概念：
+1. 接口（Interface）：
+    a) 是一个从sc_interface派生的抽象类，但不从sc_object派生。
+    b) 包含一组需要在从该接口派生的通道中定义的纯虚函数。
+2. 端口（Port）： 
+    a) 提供一种方式，使模块能够独立于其实例化上下文进行编写。 
+    b) 将接口方法调用转发到绑定到端口的通道。 
+    c) 定义了一组由包含端口的模块所需的服务（由端口的类型确定）。
+3. 通道（Channel）： 
+    a) sc_prim_channel是所有原始通道的基类。 
+    b) 通道可以提供可以使用接口方法调用范式调用的公共成员函数。 
+    c) 原始通道应实现一个或多个接口。
+简而言之： 
+* 端口需要服务，接口定义服务，通道实现服务。
+* 一个端口可以连接到（绑定）一个通道，如果该通道实现了该端口所需的接口。
+* 一个端口是对通道的指针。
+
+何时使用端口：
+1. 如果一个模块要调用属于该模块之外的通道的成员函数，则应通过该模块的端口使用接口方法调用进行调用。否则，这被认为是不良的编码风格。
+2. 然而，可以直接调用在当前模块内实例化的通道的成员函数。这称为无端口通道访问。
+3. 如果一个模块要调用子模块中的通道实例的成员函数，则应通过子模块的导出进行调用。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MODULE1) { // defines one module
+  sc_signal<int> s; // a signal (channel) inside the module
+  sc_port<sc_signal_out_if<int> > p; // a port used to write to an outside channel
+  SC_CTOR(MODULE1) {
+    SC_THREAD(selfWrite); // a process to write to own channel
+    SC_THREAD(selfRead); // a process to read from own channel
+    sensitive << s; // triggered by value change on the channel
+    dont_initialize();
+    SC_THREAD(outsideWrite); // a process to write to an outside channel
+  }
+  void selfWrite() {
+    int val = 1; // init value
+    while (true) {
+      s.write(val++); // write to own channel
+      wait(1, SC_SEC); // repeat after 1 s
+    }
+  }
+  void selfRead() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": reads from own channel, val=" << s.read() << std::endl; // read from own channel
+      wait(); // receives from signal
+    }
+  }
+  void outsideWrite() {
+    int val = 1; // init value
+    while (true) {
+      p->write(val++); // write to an outside channel, calls the write method of the outside channel. p is a pointer.
+      wait(1, SC_SEC);
+    }
+  }
+};
+SC_MODULE(MODULE2) { // a module that reads from an outside channel
+  sc_port<sc_signal_in_if<int> > p; // a port used to read from an outside channel
+  SC_CTOR(MODULE2) {
+    SC_THREAD(outsideRead); // a process to read from an outside channel
+    sensitive << p; // triggered by value change on the channel
+    dont_initialize();
+  }
+  void outsideRead() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": reads from outside channel, val=" << p->read() << std::endl; // use port to read from the channel, like a pointer.
+      wait(); // receives from port
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  MODULE1 module1("module1"); // instantiate module1
+  MODULE2 module2("module2"); // instantiate module2
+  sc_signal<int> s; // declares a signal (channel) outside module1 and moudle2
+  module1.p(s); // binds (connects) port p of module1 to channel (signal) s
+  module2.p(s); // binds port p of module2 to channel s
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: reads from own channel, val=1
+0 s: reads from outside channel, val=1
+1 s: reads from own channel, val=2
+1 s: reads from outside channel, val=2***
+# Communication: export
 updating
