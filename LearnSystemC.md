@@ -1891,4 +1891,253 @@ int sc_main(int, char*[]) {
 1 s: reads from own channel, val=2
 1 s: reads from outside channel, val=2***
 # Communication: export
+export：
+1. 允许模块向其父模块提供接口。
+2. 将接口方法调用转发到与导出绑定的通道。
+3. 定义了包含export的模块提供的一组服务。
+
+何时使用export：
+1. 通过export提供接口是替代简单地实现接口的一种方式。
+2. 显式export允许单个模块实例以结构化的方式提供多个接口。
+3. 如果一个模块需要在子模块中调用属于通道实例的成员函数，则应该通过子模块的export进行调用。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MODULE1) { // defines one module
+  sc_export<sc_signal<int>> p; // an export for other modules to connect
+  sc_signal<int> s; // a signal (channel) inside the module. If not using export, the channel need to be defined outside module1.
+  SC_CTOR(MODULE1) {
+    p(s); // bind an export to an internal channel
+    SC_THREAD(writer); // a process to write to an internal channel
+  }
+  void writer() {
+    int val = 1; // init value
+    while (true) {
+      s.write(val++); // write to an internal channel
+      wait(1, SC_SEC);
+    }
+  }
+};
+SC_MODULE(MODULE2) { // a module that reads from an export
+  sc_port<sc_signal_in_if<int>> p; // a port used to read from an export of another module
+  SC_CTOR(MODULE2) {
+    SC_THREAD(reader); // a process to read from an outside channel
+    sensitive << p; // triggered by value change on the channel
+    dont_initialize();
+  }
+  void reader() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": reads from outside channel, val=" << p->read() << std::endl; // use port to read from the channel, like a pointer.
+      wait(); // receives from port
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  MODULE1 module1("module1"); // instantiate module1
+  MODULE2 module2("module2"); // instantiate module2
+  module2.p(module1.p); // connect module2's port to module1's export. No need to declare a channel outside module1 and module2.
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: reads from outside channel, val=1
+1 s: reads from outside channel, val=2***
+# Communication: port 2 port
+到目前为止，我们讨论了以下情况：
+1. 通过通道连接同一模块的两个进程： 
+    process1() --> channel --> process2()
+2. 通过端口和通道连接不同模块的两个进程： 
+    module1::process1() --> module1::port1 --> channel --> module2::port2 --> module2::process2()
+3. 通过导出连接不同模块的两个进程：
+    module1::process1() --> module1::channel --> module1::export1 --> module2::port2 --> module2::process2()
+在这些情况下，都需要使用通道来连接端口。有一个特殊情况允许端口直接连接到子模块的端口。即， module::port1 --> module::submodule::port2
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(SUBMODULE1) { // a submodule that writes to channel
+  sc_port<sc_signal_out_if<int>> p;
+  SC_CTOR(SUBMODULE1) {
+    SC_THREAD(writer);
+  }
+  void writer() {
+    int val = 1; // init value
+    while (true) {
+      p->write(val++); // write to channel through port
+      wait(1, SC_SEC);
+    }
+  }
+};
+SC_MODULE(SUBMODULE2) { // a submodule that reads from channel
+  sc_port<sc_signal_in_if<int>> p;
+  SC_CTOR(SUBMODULE2) {
+    SC_THREAD(reader);
+    sensitive << p; // triggered by value change on the channel
+    dont_initialize();
+  }
+  void reader() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": reads from channel, val=" << p->read() << std::endl;
+      wait(); // receives from channel through port
+    }
+  }
+};
+SC_MODULE(MODULE1) { // top-level module
+  sc_port<sc_signal_out_if<int>> p; // port
+  SUBMODULE1 sub1; // declares submodule
+  SC_CTOR(MODULE1): sub1("sub1") { // instantiate submodule
+    sub1.p(p); // bind submodule's port directly to parent's port
+  }
+};
+SC_MODULE(MODULE2) {
+  sc_port<sc_signal_in_if<int>> p;
+  SUBMODULE2 sub2;
+  SC_CTOR(MODULE2): sub2("sub2") {
+    sub2.p(p); // bind submodule's port directly to parent's port
+  }
+};
+
+int sc_main(int, char*[]) {
+  MODULE1 module1("module1"); // instantiate module1
+  MODULE2 module2("module2"); // instantiate module2
+  sc_signal<int> s; // define channel outside module1 and module2
+  module1.p(s); // bind module1's port to channel, for writing purpose
+  module2.p(s); // bind module2's port to channel, for reading purpose
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: reads from channel, val=1
+1 s: reads from channel, val=2***
+# Communication: specialized ports
+除了使用基本的sc_port类来声明端口，还有其他各种专门的端口类可以使用不同的通道类型或提供额外的功能：
+1. sc_in: 一个用于信号的专用端口类。
+2. sc_fifo_in：用于从fifo读取的专用端口类。
+3. sc_fifo_out：用于写入fifo的专用端口类。
+4. sc_in<\bool> 和sc_in<sc_dt::sc_logic>: value_changed(), pos(), neg()
+5. sc_inout: 用于信号的专用端口类：value_changed(), initialize()
+6. sc_inout<\bool>和sc_inout<sc_dt::sc_logic>: 为双值信号提供额外成员函数的专用端口类：value_changed(), initialize(), pos(), neg()
+7. sc_out: 从sc_inout派生的类，除了由于是派生类所带来的一些内在差异（例如构造函数和赋值运算符），它与sc_inout完全相同。
+8. sc_in_resolved: 用于已解析信号的专用端口类。它与从类`sc_in<sc_dt::sc_logic>`派生的端口行为类似。唯一的区别是，类sc_in_resolved的端口应绑定到类sc_signal_resolved的通道，而类`sc_in<sc_dt::sc_logic>`的端口可以绑定到类`sc_signal<sc_dt::sc_logic,WRITER_POLICY>`或类sc_signal_resolved的通道。
+9. sc_inout_resolved: 用于已解析信号的专用端口类。它与从类`sc_inout<sc_dt::sc_logic>`派生的端口行为类似。唯一的区别是，类sc_inout_resolved的端口应绑定到类sc_signal_resolved的通道，而类`sc_inout<sc_dt::sc_logic>`的端口可以绑定到类`sc_signal<sc_dt::sc_logic,WRITER_POLICY>`或类sc_signal_resolved的通道。
+10. sc_out_resolved是从sc_inout_resolved派生的类，除了由于是派生类所带来的一些内在差异（例如构造函数和赋值运算符），它与sc_inout_resolved完全相同。
+11. sc_in_rv是一个用于已解析信号的专用端口类，它与从类`sc_in<sc_dt::sc_lv<W>>`派生的端口行为类似。唯一的区别是，一个sc_in_rv类端口必须绑定到sc_signal_rv类的通道上，而一个`sc_in<sc_dt::sc_lv<W>>`类的端口可以绑定到`sc_signal<sc_dt::sc_lv<W>,WRITER_POLICY>`或sc_signal_rv类的通道上。
+12. sc_inout_rv是一个用于已解析信号的专用端口类，它与从类`sc_inout<sc_dt::sc_lv<W>>`派生的端口行为类似。唯一的区别是，一个sc_inout_rv类端口必须绑定到sc_signal_rv类的通道上，而一个`sc_inout<sc_dt::sc_lv<W>>`类的端口可以绑定到`sc_signal<sc_dt::sc_lv<W>,WRITER_POLICY>`或sc_signal_rv类的通道上。
+13. sc_out_rv是从sc_inout_rv派生的类，除了由于是派生类所带来的一些内在差异（例如构造函数和赋值运算符），它与sc_inout_rv完全相同。
+
+一个基本的`sc_port<sc_signal_inout_if<int>>` 只能访问信号通道提供的以下成员函数：
+1. read()
+2. write()
+3. default_event() // 当通过 sc_sensitive 类的 operator<< 定义静态灵敏度时调用。
+4. event() // 检查是否发生了事件，返回 true/false
+5. value_changed_event() // 值改变事件
+
+一个 `sc_port<sc_signal_inout_if<bool>>` 可以访问signal<\bool>提供的附加的成员函数： 
+6. posedge() // 如果值从 false 变为 true，则返回 true 
+7. posedge_event() // 值从 false 变为 true 的事件 
+8. negedge() // 如果值从 true 变为 false，则返回 true 
+9. negedge_event() // 值从 true 变为 false 的事件
+
+一个特殊的 sc_inout<> 的端口提供了以下额外的成员函数： 
+10. initialize() // 在端口绑定到通道之前初始化端口的值 
+11. value_changed() // 用于在端口绑定到通道之前建立敏感性（指针未初始化）
+
+当底层信号通道的类型为 bool 或 sc_logic 时， sc_inout<\bool> 提供了两个额外的成员函数： 
+12. pos() // 在绑定端口之前建立敏感性 
+13. neg() // 在绑定端口之前建立敏感性
+
+在上面列出的成员函数中： 
+1~9 由信号通道提供，可通过 "port->method()" 访问； 
+10~13 由专用端口提供，可通过 "port.method()" 访问。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(WRITER) {
+  sc_out<bool> p1, p2; // specialized ports
+  SC_CTOR(WRITER) {
+    SC_THREAD(writer);
+    p1.initialize(true); // #10, initialize default value to true
+  }
+  void writer() {
+    bool v = true;
+    while (true) {
+      p1->write(v); // #2 write through port
+      v = !v; // value change
+      wait(1, SC_SEC); // repeat after 1 s
+    }
+  }
+};
+SC_MODULE(READER) {
+  sc_in<bool> p1, p2; // specialized ports
+  SC_CTOR(READER) {
+    SC_THREAD(reader1);
+    sensitive << p1 << p2; // #3 default_event(), same as p->default_event() or p.default_event()
+    dont_initialize();
+    SC_THREAD(reader2);
+    sensitive << p1.value_changed(); // #11, sensitive to value change event of an un-bound port
+    dont_initialize();
+    SC_THREAD(reader3);
+    sensitive << p1.neg(); // #13, sensitive to neg event of an un-bound port
+    dont_initialize();
+    SC_THREAD(reader4);
+    sensitive << p1.pos(); // #12, sensitive to pos event of an un-bound port
+    dont_initialize();
+  }
+  void reader1() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": default_event. p1 = " << p1->read() << "; p1 triggered? " << p1->event() << "; p2 triggered? " << p2->event() << std::endl; // #1 read(), #4 event()
+      wait();
+    }
+  }
+  void reader2() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": value_changed_event. p1 = " << p1->read() <<  std::endl; // #1 read()
+      wait();
+    }
+  }
+  void reader3() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": negedge_event. p1 = " << p1->read() << "; negedge = " << p1->negedge() << std::endl; // #8, if negedge happened
+      wait();
+    }
+  }
+  void reader4() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": posedge_event. p1 = " << p1->read() <<  "; posedge = " << p1->posedge() << std::endl; // #6, if posedge happened
+      wait();
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  WRITER writer("writer"); // instantiate writer
+  READER reader("reader"); // instantiate reader
+  sc_signal<bool> b1, b2; // declare boolean signal channel
+  writer.p1(b1); // port binding
+  writer.p2(b2);
+  reader.p1(b1);
+  reader.p2(b2);
+  sc_start(4, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: posedge_event. p1 = 1; posedge = 1
+0 s: value_changed_event. p1 = 1
+0 s: default_event. p1 = 1; p1 triggered? 1; p2 triggered? 0
+1 s: negedge_event. p1 = 0; negedge = 1
+1 s: value_changed_event. p1 = 0
+1 s: default_event. p1 = 0; p1 triggered? 1; p2 triggered? 0
+2 s: posedge_event. p1 = 1; posedge = 1
+2 s: value_changed_event. p1 = 1
+2 s: default_event. p1 = 1; p1 triggered? 1; p2 triggered? 0
+3 s: negedge_event. p1 = 0; negedge = 1
+3 s: value_changed_event. p1 = 0
+3 s: default_event. p1 = 0; p1 triggered? 1; p2 triggered? 0***
+# Communication: port array
 updating
