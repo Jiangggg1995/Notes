@@ -2140,4 +2140,615 @@ int sc_main(int, char*[]) {
 3 s: value_changed_event. p1 = 0
 3 s: default_event. p1 = 0; p1 triggered? 1; p2 triggered? 0***
 # Communication: port array
-updating
+在声明一个端口时：
+1. 第一个参数是接口名称，同时也是端口的类型： 
+    一个端口只能绑定到从端口类型派生的通道，或者绑定到另一个端口，或者绑定到一个从端口类型派生的类型的export。
+2. 第二个参数是一个可选的整数值，用于指定端口实例可以绑定的最大通道实例数： 
+    a) 默认值为1。 
+    b) 如果值为0，则该端口可以绑定任意数量的通道实例。 
+    c) 将端口绑定到比允许的数量更多的通道实例是错误的。
+3. 第三个参数是一个可选的sc_port_policy类型的端口策略，用于确定多端口绑定的规则和未绑定端口的规则： 
+    a) \[default] SC_ONE_OR_MORE_BOUND: 该端口应绑定到一个或多个通道，最大数量由第二个参数的值确定。在推理结束时，端口保持未绑定是错误的。 
+    b) SC_ZERO_OR_MORE_BOUND: 该端口应绑定到零个或多个通道，最大数量由第二个参数的值确定。在推理结束时，端口保持未绑定是可以的。 
+    c) SC_ALL_BOUND: 该端口应绑定到正好等于第二个参数值指定的通道实例数，不多也不少，前提是该值大于零。
+        1) 如果第二个参数的值为0，则策略SC_ALL_BOUND与策略SC_ONE_OR_MORE_BOUND具有相同的含义。
+		2) 在推理结束时，端口保持未绑定或绑定到比第二个参数所需的通道少是错误。
+将给定的端口多次绑定到一个给定的通道是不对的，无论是直接绑定还是通过另一个端口绑定。
+另一种定义端口数组的方法是使用C/C++数组语法：sc_port p\[10] 或 vector<sc_port\<IF>> p(10);。
+
+示例：
+
+1. sc_port\<IF>                                                          // 绑定到恰好1个通道实例
+2. sc_port<IF,0>                                                       // 绑定到1个或多个通道实例，没有上限
+3. sc_port<IF,3>                                                       // 绑定到1、2或3个通道实例
+4. sc_port<IF,0,SC_ZERO_OR_MORE_BOUND>       // 绑定到0个或多个通道实例，没有上限
+5. sc_port<IF,1,SC_ZERO_OR_MORE_BOUND>       // 绑定到0个或1个通道实例
+6. sc_port<IF,3,SC_ZERO_OR_MORE_BOUND>       // 绑定到0个、1个、2个或3个通道实例
+7. sc_port<IF,3,SC_ALL_BOUND>                            // 绑定到恰好3个通道实例
+8. sc_port<IF, 3>                                                     // 3个端口的数组，每个绑定到恰好1个通道实例
+9. vector<sc_port\<IF>> p(3)                                  // 3个端口的数组，每个绑定到恰好1个通道实例
+```c++
+#include <systemc>
+#include <vector> // used to define a vector of ports
+using namespace sc_core;
+
+SC_MODULE(WRITER) {
+  sc_port<sc_signal_out_if<int>> p1; // #1: exactly 1 channel
+  sc_port<sc_signal_out_if<int>, 0> p2; // #2: 1 or more channels, no upper limit
+  sc_port<sc_signal_out_if<int>, 3> p3; // #3: 1, 2, or 3 channels
+  sc_port<sc_signal_out_if<int>, 0, SC_ZERO_OR_MORE_BOUND> p4; // #4: 0 or more channels, no upper limit
+  sc_port<sc_signal_out_if<int>, 1, SC_ZERO_OR_MORE_BOUND> p5; // #5: 0 or 1 channels
+  sc_port<sc_signal_out_if<int>, 3, SC_ZERO_OR_MORE_BOUND> p6; // #6: 0, 1, 2, or 3 channels
+  sc_port<sc_signal_out_if<int>, 3, SC_ALL_BOUND> p7; // #7: exactly 3 channels
+  std::vector<sc_port<sc_signal_out_if<int>>> p9; // #9: vector of port
+  SC_CTOR(WRITER) : p9(3) { // init p9 to size of 3
+    SC_THREAD(writer);
+  }
+  void writer() {
+    int v = 1;
+    while (true) {
+      p9[0]->write(v); // write to p9[0]
+      p7[1]->write(v++); // write to p7[1]
+      wait(1, SC_SEC);
+    }
+  }
+};
+SC_MODULE(READER) {
+  sc_port<sc_signal_in_if<int>> p1; // #1: exactly 1 channel
+  sc_port<sc_signal_in_if<int>, 0> p2; // #2: 1 or more channels, no upper limit
+  sc_port<sc_signal_in_if<int>, 3> p3; // #3: 1, 2, or 3 channels
+  sc_port<sc_signal_in_if<int>, 0, SC_ZERO_OR_MORE_BOUND> p4; // #4: 0 or more channels, no upper limit
+  sc_port<sc_signal_in_if<int>, 1, SC_ZERO_OR_MORE_BOUND> p5; // #5: 0 or 1 channels
+  sc_port<sc_signal_in_if<int>, 3, SC_ZERO_OR_MORE_BOUND> p6; // #6: 0, 1, 2, or 3 channels
+  sc_port<sc_signal_in_if<int>, 3, SC_ALL_BOUND> p7; // #7: exactly 3 channels
+  std::vector<sc_port<sc_signal_in_if<int>>> p9; // #9: exactly 3 channels
+  SC_CTOR(READER) : p9(3) { // init p9 to size of 3
+    SC_THREAD(reader7);
+    sensitive << p7; // sensitive to any element of port array p7
+    dont_initialize();
+    SC_THREAD(reader9);
+    sensitive << p9[0] << p9[1] << p9[2]; // sensitive to any element of port array p9
+    dont_initialize();
+  }
+  void reader7() {
+    while (true) {
+      std::cout << sc_time_stamp() << "; reader7, port 0/1/2 = " << p7[0]->read() << "/" << p7[1]->read() << "/" << p7[2]->read() << std::endl;
+      wait();
+    }
+  }
+  void reader9() {
+    while (true) {
+      std::cout << sc_time_stamp() << "; reader9, port 0/1/2 = " << p9[0]->read() << "/" << p9[1]->read() << "/" << p9[2]->read() << std::endl;
+      wait();
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  WRITER writer("writer"); // instantiate writer
+  READER reader("reader"); // instantiate reader
+  // declare channels
+  sc_signal<int> s1; // 1 channel
+  std::vector<sc_signal<int>> s2(10); // 10 channels
+  std::vector<sc_signal<int>> s3(2); // 2 channel
+  // leave s4 un-bound
+  sc_signal<int> s5; // 1 channel
+  std::vector<sc_signal<int>> s6(2); // 2 channels
+  std::vector<sc_signal<int>> s7(3); // 3 channels
+  // #8 is same as #9, omitted
+  std::vector<sc_signal<int>> s9(3); // 3 channels
+  // bind ports
+  writer.p1(s1); // #1
+  reader.p1(s1); // #1
+  for (unsigned int i = 0; i < s2.size(); ++i) { // #2
+    writer.p2(s2[i]);
+    reader.p2(s2[i]);
+  }
+  for (unsigned int i = 0; i < s3.size(); ++i) { // #3
+    writer.p3(s3[i]);
+    reader.p3(s3[i]);
+  }
+  // s4 un-bound
+  writer.p5(s5); // #5
+  reader.p5(s5); // #5
+  for (unsigned int i = 0; i < s6.size(); ++i) { // #6
+    writer.p6(s6[i]);
+    reader.p6(s6[i]);
+  }
+  for (unsigned int i = 0; i < s7.size(); ++i) { // #7
+    writer.p7(s7[i]);
+    reader.p7(s7[i]);
+  }
+  for (unsigned int i = 0; i < s9.size(); ++i) { // #9
+    writer.p9[i](s9[i]);
+    reader.p9[i](s9[i]);
+  }
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s; reader9, port 0/1/2 = 1/0/0
+0 s; reader7, port 0/1/2 = 0/1/0
+1 s; reader9, port 0/1/2 = 2/0/0
+1 s; reader7, port 0/1/2 = 0/2/0***
+# Primitive Channel
+sc_prim_channel：
+1. 是所有原始通道的基类。
+2. 为原始通道提供独特的访问调度器更新阶段的途径。
+3. 不包含层次结构、端口或仿真过程。
+4. 与分层通道相同的是，原始通道可以提供公共成员函数，可以使用接口方法调用范式进行调用。
+提供如下成员函数：
+a) request_update(): 
+    调度程序将通道的更新请求排队 
+b) async_request_update(): 
+    1. 调度程序以线程安全的方式将通道的更新请求排队。能够可靠地从systemC内核之外的操作系统线程调用。 
+    2. 不建议从在systemC内核上下文中执行的函数中调用 
+c) update(): 
+    1. 调度程序在更新阶段响应对request_update或async_request_update的调用时回调。 
+    2. 应用程序可以覆盖此成员函数。sc_prim_channel本身对此函数的定义什么都不做。 
+    3. 通常只读取和修改当前对象的数据成员并创建delta通知。 
+    4. 不应该： 
+        a) 如果在当前对象的基类中覆盖，则除update函数之外，不要调用类sc_prim_channel的任何成员函数。 
+        b) 不带参数调用类sc_event的成员函数notify()以创建立即通知。 
+        c) 调用类sc_process_handle的任何成员函数进行进程控制（例如挂起或杀死）。
+        d) 更改除当前对象的数据成员之外的任何存储的状态。 
+        e) 读取除当前对象之外的任何原始通道实例的状态。 
+        f) 调用其他通道实例的接口方法。特别是，update成员函数不应写入任何信号。 
+d) next_trigger() 
+e) wait()
+一个通道需要实现一个或多个接口，因此需要继承自接口类（sc_interface的基类）。接口提供了通道所需的方法。
+```c++
+#include <systemc>
+#include <string>
+using namespace sc_core;
+
+class GENERATOR_IF : public sc_interface { // interface for interrupt generator
+public:
+  virtual void notify() = 0;
+};
+class RECEIVER_IF : public sc_interface { // interface for interrupt receiver
+public:
+  virtual const sc_event& default_event() const = 0; // needed for sensitive
+};
+class INTERRUPT : public sc_prim_channel, public GENERATOR_IF, public RECEIVER_IF { // interrupt class
+public:
+  INTERRUPT(sc_module_name name) : sc_prim_channel(name) {} // constructor, construct sc_prim_channel
+  void notify() { // implement GENERATOR_IF
+    e.notify();
+  }
+  const sc_event& default_event() const { // implement RECEIVER_IF
+    return e;
+  }
+private:
+  sc_event e; // private event for synchronization
+};
+SC_MODULE(GENERATOR) { // interrupt generator class
+  sc_port<GENERATOR_IF> p; // port to generate interrupt
+  SC_CTOR(GENERATOR) { // constructor
+    SC_THREAD(gen_interrupt);
+  }
+  void gen_interrupt() {
+    while (true) {
+      p->notify(); // calls notify function of the INTERRUPT channel
+      wait(1, SC_SEC);
+    }
+  }
+};
+SC_MODULE(RECEIVER) { // interrupt receiver class
+  sc_port<RECEIVER_IF> p; // port to receive interrupt
+  SC_CTOR(RECEIVER) { // constructor
+    SC_THREAD(rcv_interrupt);
+    sensitive << p; // monitors interrupt on port p
+    dont_initialize();
+  }
+  void rcv_interrupt() { // triggered upon interrupt
+    while (true) {
+      std::cout << sc_time_stamp() << ": interrupt received" << std::endl;
+      wait();
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  GENERATOR generator("generator"); // instantiate generator
+  RECEIVER receiver("receiver"); // instantiate receiver
+  INTERRUPT interrupt("interrupt"); // instantiate interrupt
+  generator.p(interrupt); // port binding
+  receiver.p(interrupt); // port binding
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: interrupt received
+1 s: interrupt received***
+# Hierarchical Channel
+分层通道：
+1. 应继承sc_channel基类，该基类与sc_module相同。因此，分层通道是systemC模块。
+2. 应从接口继承，以便与端口连接。
+像常规的systemC模块一样，分层通道也可能有仿真过程、端口等。
+这个例子展示了一个自定义的分层通道，它实现了sc_signal_inout_if\<int>。根据sc_signal_inout_if的定义，我们必须实现以下函数：
+1. void write(const int&)
+2. const int& read() const
+3. const sc_event& value_changed_event() const
+4. const sc_event& default_event() const
+5. const int& get_data_ref() const
+6. bool event() const
+```c++
+#include <systemc>
+using namespace sc_core;
+
+// this is a simple implementation as compared to sc_signal, just to illustrate the concept of a hieracical channel
+class SIGNAL : public sc_channel, public sc_signal_inout_if<int> { // declares SIGNAL channel, inherits from sc_chanel and signal_inout_if<int>
+public:
+  SC_HAS_PROCESS(SIGNAL);
+  SIGNAL(sc_module_name name = sc_gen_unique_name("SIG")) : sc_channel(name) {} // constructor, construct base class
+  void write(const int& v) { // implements write method
+    if (v != m_val) { // update only if value is new
+      m_val = v; // update value
+      e.notify(); // trigger event
+    }
+  }
+  const int& read() const {
+    return m_val;
+  }
+  const sc_event& value_changed_event() const {
+    return e; // return reference to the event
+  }
+  const sc_event& default_event() const {
+    return value_changed_event(); // allows used in static sensitivity list
+  }
+  const int& get_data_ref() const {
+    return m_val;
+  }
+  bool event() const {
+    return true; // dummy implementation, always return true
+  }
+private:
+  int m_val = 0;
+  sc_event e;
+};
+
+SC_MODULE(TEST) { // a test class
+  SIGNAL s; // declares SIGNAL channel
+  SC_CTOR(TEST) { // no name provided to s, use default
+    SC_THREAD(writer); // register a writer process
+    SC_THREAD(reader); // register a reader process
+    sensitive << s; // use SIGNAL channel in static sensitivity list
+    dont_initialize();
+  }
+  void writer() {
+    int v = 1;
+    while (true) {
+      s.write(v++); // write to channel
+      wait(1, SC_SEC);
+    }
+  }
+  void reader() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": val = " << s.read() << std::endl; // read from channel
+      wait();
+    }
+  }
+};
+int sc_main(int, char*[]) {
+  TEST test("test"); // instantiate generator
+  sc_start(2, SC_SEC);
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: val = 1
+1 s: val = 2***
+# Trace File
+一个跟踪文件：
+1. 记录仿真过程中按时间顺序排列的值序列。
+2. 使用VCD（值变化转储）文件格式。
+3. 只能通过sc_create_vcd_trace_file创建和打开。
+4. 可以在推理过程中或在仿真过程中的任何时候打开。
+5. 包含只能通过sc_trace追踪的值。
+6. 在将值记录到该文件之前，应打开跟踪文件，如果自打开文件以来一个或多个delta周期已过，则不应将值记录到给定的跟踪文件。
+7. 应由sc_close_vcd_trace_file关闭。在仿真的最后一个delta周期之前，跟踪文件不应被关闭。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MODULE) { // a module write to a channel
+  sc_port<sc_signal<int>> p; // a port
+  SC_CTOR(MODULE) {
+    SC_THREAD(writer); // a writer process
+  }
+  void writer() {
+    int v = 1;
+    while (true) {
+      p->write(v++); // write to channel via port
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+};
+int sc_main(int, char*[]) {
+  MODULE module("module"); // instantiate module
+  sc_signal<int> s; // declares signal channel
+  module.p(s); // bind port to channel
+
+  sc_trace_file* file = sc_create_vcd_trace_file("trace"); // open trace file
+  sc_trace(file, s, "signal"); // trace "s" under the name of "signal"
+  sc_start(5, SC_SEC); // run simulation for 5 s
+  sc_close_vcd_trace_file(file); // close trace file
+  return 0;
+}
+```
+上面代码输出结果:
+***Info: (I702) default timescale unit used for tracing: 1 ps (trace.vcd)***
+# Error and Message Report
+sc_report:
+    1. 表示由函数 `sc_report_handler::report` 生成的报告的实例。
+    2. 如果为给定的严重性级别和消息类型设置了 `SC_CACHE_REPORT`，则应用程序可以访问该报告。
+    3. 当报告处理程序抛出时，应用程序可以捕获该报告。
+sc_report_handler:
+    提供用于写入异常情况发生时的文本报告的功能，以及用于定义生成这些报告时要执行的应用程序特定行为的功能。
+sc_severity 表示报告的严重性级别：
+    1. `enum sc_severity {SC_INFO = 0, SC_WARNING, SC_ERROR, SC_FATAL, SC_MAX_SEVERITY}`;
+    2. 有四个严重性级别。`SC_MAX_SEVERITY` 不是严重性级别。将 `SC_MAX_SEVERITY` 传递给需要 `sc_severity` 类型参数的函数是错误的。
+
+`sc_verbosity`提供了可以作为参数传递给类`sc_report_handler`的成员函数`set_verbosity_level`和`report`的指示性详细程度值:
+`enum sc_verbosity {SC_NONE = 0, SC_LOW = 100, SC_MEDIUM = 200, SC_HIGH = 300, SC_FULL = 400, SC_DEBUG = 500};`
+
+sc_actions代表一个字，其中字中的每一位都代表一个不同的操作。如果设置了多个位，则应执行所有相应的操作：
+1. enum {
+     SC_UNSPECIFIED  = 0x0000, //is not an action, serves as the default value meaning that no action has been set.
+     SC_DO_NOTHING   = 0x0001, // is a specified action
+     SC_THROW        = 0x0002,
+     SC_LOG          = 0x0004,
+     SC_DISPLAY      = 0x0008,
+     SC_CACHE_REPORT = 0x0010,
+     SC_INTERRUPT    = 0x0020,
+     SC_STOP         = 0x0040,
+     SC_ABORT        = 0x0080
+    }
+2. 每个严重级别都对应一个默认的行为，可以用函数set_action()覆盖默认行为
+3. 默认行为：
+    a) `#define SC_DEFAULT_INFO_ACTIONS ( SC_LOG | SC_DISPLAY )`
+    b) `#define SC_DEFAULT_WARNING_ACTIONS ( SC_LOG | SC_DISPLAY )`
+    c) `#define SC_DEFAULT_ERROR_ACTIONS ( SC_LOG | SC_CACHE_REPORT | SC_THROW )`
+    d) `#define SC_DEFAULT_FATAL_ACTIONS ( SC_LOG | SC_DISPLAY | SC_CACHE_REPORT | SC_ABORT )`
+
+`void report(sc_severity, const char* msg_type, const char* msg, [int verbosity], const char* file, int line`)生成一个报告并采取对应的操作：
+1. 使用作为第一个参数传递的严重程度和作为第二个参数传递的消息类型来确定由于之前对函数 set_actions、stop_after、suppress 和 force 的调用而要执行的action set。
+2. 使用所有五个参数值创建 sc_report 类的对象，并将该对象传递给通过成员函数 set_handler 设置的hander实例。
+3. 除非设置了动作 SC_CACHE_REPORT，否则不会在调用成员函数 report 后持久保留。在这种情况下，可以通过调用函数 get_cached_reports 来检索该对象。
+4. 负责确定要执行的行动集。通过函数 set_handler 设置的处理程序函数负责执行这些行动。
+5. 维护报告的计数。无论是否执行或抑制行动，这些计数都应增加，除非由于报告的详细程度级别而忽略报告，在这种情况下，计数不应增加。
+
+set_actions()：
+1. 设置成员函数 report 在使用给定的严重性级别、消息类型或两者一起调用时采取的action。
+2. 替换之前针对给定的严重性、消息类型或严重性-消息类型对调用的action。
+
+stop_after(): 
+	report 应当在为给定的严重性级别、消息类型或严重性消息类型对调用 stop_after 函数的参数 limit 所给定的报告数量时调用 sc_stop。
+
+get_count(): 
+    返回由成员函数 report 维护的每个严重性级别、每个消息类型和每个严重性消息类型对所产生的报告的数量。
+
+Verbosity level：
+1. int set_verbosity_level(int)：将最大详细程度级别设置为作为参数传递的值，并返回最大详细程度级别的上一个值。
+2. int get_verbosity_level()：返回最大详细程度级别的值。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MODULE) { // a test module
+  sc_port<sc_signal<int>> p; // a port
+  SC_CTOR(MODULE) { // constructor
+    SC_REPORT_WARNING("ctor", "register function"); // gen report to "ctor"
+    SC_THREAD(writer); // a writer process
+    SC_THREAD(reader); // a reader process
+    sensitive << p; // sensitive to p
+    dont_initialize();
+  }
+  void writer() {
+    int v = 1;
+    while (true) {
+      SC_REPORT_INFO("writer", ("write " + std::to_string(v)).c_str()); // gen report to "writer"
+      p->write(v++); // write to channel via port
+      wait(1, SC_SEC); // write every 1 s
+    }
+  }
+  void reader() {
+    while (true) {
+      SC_REPORT_INFO("reader", ("read " + std::to_string(p->read())).c_str()); // gen report to "reader"
+      wait();
+    }
+  }
+};
+int sc_main(int, char*[]) {
+  sc_report_handler::set_log_file_name("report.log"); // initialize report
+  sc_report_handler::set_actions("writer", SC_INFO, SC_LOG); // INFO of "writer" saved in log, no display
+
+  MODULE module("module"); // instantiate module
+  sc_signal<int> s; // declares signal channel
+  module.p(s); // bind port to channel
+
+  SC_REPORT_INFO("main", "simulation starts"); // gen report to "main"
+  sc_start(2, SC_SEC); // run simulation for 2 s
+  SC_REPORT_INFO("main", "simulation ends"); // gen report to "main"
+  return 0;
+}
+```
+上面代码输出结果:
+***Warning: ctor: register function
+In file: /home/jiang/code/c_example/example.cpp:7
+Info: main: simulation starts
+Info: reader: read 1
+Info: reader: read 2
+Info: main: simulation ends***
+# Customized Data Type
+`sc_signal<T>`和`sc_fifo<T>`可以与各种数据类型一起使用。SystemC已经支持了内置数据类型当作T。
+为了在sc_signal和sc_fifo中使用自定义数据类型，需要为数据类型实现以下成员函数： 
+1. 赋值运算符，即operator=()：用于读写方法 
+2. 相等运算符，即operator\==()：由sc_signal用于value_changed_event() 
+3. 输出流，即ostream& operator<<()：用于打印数据结构 
+4. sc_trace()：允许数据类型与systemC跟踪工具一起使用；允许使用waveform查看器查看跟踪的数据。
+```c++
+#include <systemc>
+#include <ostream>
+using namespace sc_core;
+
+struct CUSTOMIZED_TYPE {
+  int x, y; // member variables
+  CUSTOMIZED_TYPE(int x = 0, int y = 0) : x(x), y(y) {} // constructor
+  CUSTOMIZED_TYPE& operator=(const CUSTOMIZED_TYPE& rhs) { // assignment operator, needed for read() write()
+    x = rhs.x;
+    y = rhs.y;
+    return *this;
+  }
+  bool operator==(const CUSTOMIZED_TYPE& rhs) { // equality operator, needed for value_changed_event()
+    return x == rhs.x && y == rhs.y;
+  }
+};
+std::ostream& operator<<(std::ostream& os, const CUSTOMIZED_TYPE& val) { // streaming output, needed for printing
+  os << "x = " << val.x << "; y = " << val.y << std::endl;
+  return os;
+}
+inline void sc_trace(sc_trace_file*& f, const CUSTOMIZED_TYPE& val, std::string name) { // needed for tracing
+  sc_trace(f, val.x, name + ".x");
+  sc_trace(f, val.y, name + ".y");
+}
+
+SC_MODULE(MODULE) { // test module
+  sc_signal<CUSTOMIZED_TYPE> s; // customized signal
+  SC_CTOR(MODULE) { // constructor
+    SC_THREAD(writer); // writer process
+    SC_THREAD(reader); // reader process
+    sensitive << s; // sensitive to customized signal s
+    dont_initialize();
+  }
+  void writer() {
+    int x = 1; // init signal
+    int y = 2;
+    while (true) {
+      s.write(CUSTOMIZED_TYPE{x++, y++}); // write to signal
+      wait(1, SC_SEC); // wait 1 s
+    }
+  }
+  void reader() {
+    while (true) {
+      std::cout << sc_time_stamp() << ": receives " << s.read() << std::endl; // read from signal
+      wait(); // wait for value_changed_event
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  MODULE module("module"); // instantiate module
+  sc_trace_file* file = sc_create_vcd_trace_file("trace"); // open trace file
+  sc_trace(file, module.s, "customized_type"); // trace customized signal
+  sc_start(2, SC_SEC); // run simulation for 2 s
+  sc_close_vcd_trace_file(file); // close trace file
+  return 0;
+}
+```
+上面代码输出结果:
+***0 s: receives x = 1; y = 2
+Info: (I702) default timescale unit used for tracing: 1 ps (trace.vcd)
+1 s: receives x = 2; y = 3***
+# Clock
+sc_clock 是一个从 sc_signal 类派生而来的预定义原始通道，用于模拟数字时钟信号的行为。 通过接口 sc_signal_in_if 可以访问与时钟相关的值和事件。
+
+构造函数： 
+```c++
+sc_clock(
+  constchar*name_, // unique module name
+  double period_v_, // the time interval between two consecutive transitions from false to true, also equal to the time interval between two consecutive transitions from true to false. Greater than zero, default is 1 nanosecond.
+  sc_time_unit period_tu_, // time unit, used for period
+  double duty_cycle_, // the proportion of the period during which the clock has the value true. Between 0.0 and 1.0, exclusive. Default is 0.5.
+  double start_time_v_, // the absolute time of the first transition of the value of the clock (false to true or true to false). Default is zero.
+  sc_time_unit start_time_tu_,
+  bool posedge_first_ = true ); // if true, the clock is initialized to false, and changes to true at the start time. Vice versa. Default is true.
+```
+example
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(CLOCK) {
+  sc_port<sc_signal_in_if<bool>> clk; // a port to access clock
+  SC_CTOR(CLOCK) {
+    SC_THREAD(thread); // register a thread process
+    sensitive << clk; // sensitive to clock
+    dont_initialize();
+  }
+  void thread() {
+    while (true) {
+      std::cout << sc_time_stamp() << ", value = " << clk->read() << std::endl; // print current clock value
+      wait(); // wait for next clock value change
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  sc_clock clk("clk", 10, SC_SEC, 0.2, 10, SC_SEC, false); // 10s period, 2s true, 8s false, start at 10s, start at false.
+  CLOCK clock("clock"); // instantiate module
+  clock.clk(clk); // bind port
+  sc_start(31, SC_SEC); // run simulation for 31 s
+  return 0;
+}
+```
+上面代码输出结果:
+***10 s, value = 0
+18 s, value = 1
+20 s, value = 0
+28 s, value = 1
+30 s, value = 0***
+# Process: CTHREAD
+SC_CTHREAD的描述如下：
+1. 在SystemC 2.0中已被弃用。但在第二个参数是事件查找器的情况下仍然受支持。
+2. 在注册一个进程时需要时钟。
+3. 没有像SC_METHOD或SC_THREAD似的单独的灵敏度列表。
+4. 每当指定的时钟边沿发生时就会被激活。
+```c++
+#include <systemc>
+using namespace sc_core;
+
+SC_MODULE(MODULE) {
+  sc_in<bool> clk; // need event_finder method, cannot use basic sc_port
+  SC_CTOR(MODULE) {
+    SC_CTHREAD(cthread1, clk); // sensitive to clk pos edge
+    // no static sensitivity, thus, cannot use dont_initialize()
+    SC_CTHREAD(cthread2, clk.pos()); // sensitive to clk pos edge
+    SC_CTHREAD(cthread3, clk.neg()); // sensitive to clk neg edge
+  }
+  void cthread1() {
+    while (true) {
+      wait(); // wait for clk pos edge; wait() right after while loop to avoid initialization
+      std::cout << sc_time_stamp() << ", cthread1, value = " << clk->read() << std::endl;
+    }
+  }
+  void cthread2() {
+    while (true) {
+      wait(); // wait for clk pos edge
+      std::cout << sc_time_stamp() << ", cthread2, value = " << clk->read() << std::endl;
+    }
+  }
+  void cthread3() {
+    while (true) {
+      wait(); // wait for clk neg edge
+      std::cout << sc_time_stamp() << ", cthread3, value = " << clk->read() << std::endl;
+    }
+  }
+};
+
+int sc_main(int, char*[]) {
+  sc_clock clk("clk", 10, SC_SEC, 0.2, 10, SC_SEC, false); // 10s period, 2s true, 8s false, start at 10s, start at false.
+  MODULE module("module"); // instantiate module
+  module.clk(clk); // bind port
+  sc_start(31, SC_SEC); // run simulation for 31 s
+  return 0;
+}
+```
+上面代码输出结果:
+***20 s, cthread3, value = 0
+28 s, cthread2, value = 1
+28 s, cthread1, value = 1
+30 s, cthread3, value = 0***
