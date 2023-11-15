@@ -19,8 +19,7 @@ Email： yunheng_jiang@outlook.com
 举一个不太恰当的例子，我们有这么一个map，{水果：好吃，  中药：难吃}。现在我们用香蕉作为query，香蕉与水果这个key相似度为0.9，与中药相似度为0.1，所以香蕉好不好吃这个query的结果为0.9×好吃+0.1×难吃，得到结论：还是挺好吃的。
 
 现在我们把用数学的语言再描述一次这个过程。这里Q(uery) K(ey) V(alue)都是矩阵。假设Q是一个长度为n的一维向量（或者1×n的矩阵），K是5×n的矩阵，V是5×m的矩阵（Key-Value键值对，所以K和V必须都是5）。回忆上面步骤，我们应该首先找Q和K的相似度，上面香蕉的例子我们直接假设相似度为0.9的，那向量的相似度应该怎么求呢？文中提出用点积（dot-product），$Q \cdot K^{T}$得到一个1× 5的向量，然后通过softmax将这5个值处理成上面提到相似度。然后通过1×5的相似度矩阵去乘V，得到最终1×m的结果。这个最终结果的维度和每个value的维度是一样的。
-
-![]()
+![](https://github.com/Jiangggg1995/Notes/blob/main/images/attention.png?raw=true)
 
 理解了上面这个过程，我们对文中这个QKV计算过程应该就没有太多疑问了。原文的公式中除了上述描述过程外，在$Q \cdot K^{T}$后还统一处理一个$\sqrt{d_k}$，这个看网上解释是为了防止输入softmax的值过大而梯度趋近于0，不利于训练。不管如何，这个值不影响数据分布。（这里还有个可选的Mask层待补充）。
 
@@ -31,11 +30,11 @@ $Attention(Q,K,V) = softmax(\frac {QK^{T}}{d_k})$
 那么multi-head attention又是啥呢？其实就是由一个x和多组权重，计算得到多组QKV，可以认为是多个attention计算完后的结果concat起来，一种给大模型堆参数量的方式？
 
 ### Transformer结构
-![]()
+![](https://github.com/Jiangggg1995/Notes/blob/main/images/transformer.png?raw=true)
 文中一个transformer除了multi-head attention结构外还有ADD，Norm和FeedForward。这里add其实就是一个skip connection（跳连接，残差连接），这个在resnet之后已经被广泛接受了，好处不再赘叙。
 
 transformer里面的normlization可以提一句。它用的是layer norm而不是CNN传统的batch norm。我们知道做norm首先要求均值，再用均值对每个元素做归一。batch norm和layer norm的区别就在于，对什么元素集合做均值。batch norm是在batch的维度对每个元素做均值，而layer norm是对每个batch类的单个输入做norm。在NLP领域layer norm更适合，是因为输入sequence的长短可能不一样而需要padding，用batch norm的话padding的值会对归一化产生较大的不利影响。两者区别在于
-![]()
+![](https://github.com/Jiangggg1995/Notes/blob/main/images/BN_vs_LN.png?raw=true)
 
 FeedForward这个前馈层从代码看就是一个mlp层，好像没啥特别的。
 
