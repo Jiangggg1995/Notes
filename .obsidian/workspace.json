@@ -4,16 +4,16 @@
     "type": "split",
     "children": [
       {
-        "id": "3950046bed3868c1",
+        "id": "a8daaec064058e17",
         "type": "tabs",
         "children": [
           {
-            "id": "f0c2da2fa5e7b922",
+            "id": "f350ffdbcd124273",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Effective C++.md",
+                "file": "快速理解Attention和大模型.md",
                 "mode": "source",
                 "source": false
               }
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Effective C++.md",
+                "file": "快速理解Attention和大模型.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -110,7 +110,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Effective C++.md",
+                "file": "快速理解Attention和大模型.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               }
@@ -133,7 +133,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Effective C++.md"
+                "file": "快速理解Attention和大模型.md"
               }
             }
           }
@@ -154,10 +154,18 @@
       "command-palette:打开命令面板": false
     }
   },
-  "active": "f0c2da2fa5e7b922",
+  "active": "f350ffdbcd124273",
   "lastOpenFiles": [
-    "CSAPP.md",
+    "images/BN_vs_LN.drawio.crswap",
+    "images/BN_vs_LN.drawio",
+    "images/attention.png",
+    "images/transformer.png",
+    "未命名.canvas",
+    "快速理解Attention和大模型.md",
+    "未命名",
+    "LearnSystemC.md",
     "Effective C++.md",
+    "CSAPP.md",
     "images/filters.png",
     "images/csapp/memory_hierarchy.png",
     "images/csapp/hardware_organization.png",
